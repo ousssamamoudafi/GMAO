@@ -1,132 +1,223 @@
-import { useState, useEffect } from "react";
-import axios from "axios";
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Card, Btn, ROLES } from "../components/ui";
-
-const avatarColor = (r) =>
-  r === "admin" ? "var(--violet)"
-  : r === "responsable" ? "var(--blue)"
-  : r === "major" ? "#06b6d4"
-  : "var(--teal)";
+import { useTheme } from "../context/ThemeContext";
+import { Card, Btn, Field } from "../components/ui";
 
 export default function Login() {
   const { login } = useAuth();
-  const [comptes, setComptes] = useState(null);
-  const [sel, setSel] = useState(null);
-  const [majorOpen, setMajorOpen] = useState(false);
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(() => {
+    const saved = localStorage.getItem("gmao_remember_email");
+    if (saved) {
+      setEmail(saved);
+      return true;
+    }
+    return false;
+  });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  // Charge la liste des comptes via une route publique du backend
-  useEffect(() => {
-    axios.get("http://localhost:5000/api/auth/comptes-demo")
-      .then((r) => setComptes(r.data))
-      .catch(() => setErr("Backend introuvable sur le port 5000. Lancez 'python run.py' dans le dossier backend."));
-  }, []);
+  const from = location.state?.from?.pathname || "/";
 
-  const connecter = async () => {
-    if (!sel) return;
-    setBusy(true); setErr("");
+  const validateEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    // Validation
+    if (!email.trim()) {
+      setError("Veuillez entrer votre adresse email.");
+      return;
+    }
+    if (!validateEmail(email)) {
+      setError("Veuillez entrer une adresse email valide.");
+      return;
+    }
+    if (!password) {
+      setError("Veuillez entrer votre mot de passe.");
+      return;
+    }
+    if (password.length < 4) {
+      setError("Le mot de passe doit contenir au moins 4 caracteres.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      await login(sel.email, "hupsa2026");
-    } catch {
-      setErr("Identifiants invalides.");
-      setBusy(false);
+      // Save email if remember me is checked
+      if (rememberMe) {
+        localStorage.setItem("gmao_remember_email", email);
+      } else {
+        localStorage.removeItem("gmao_remember_email");
+      }
+
+      await login(email, password);
+      navigate(from, { replace: true });
+    } catch (err) {
+      if (err.response?.status === 401) {
+        setError("Email ou mot de passe incorrect.");
+      } else if (err.response?.status === 404) {
+        setError("Aucun compte trouve avec cet email.");
+      } else if (err.code === "ERR_NETWORK") {
+        setError("Impossible de se connecter au serveur. Verifiez que le backend est lance.");
+      } else {
+        setError("Une erreur est survenue. Veuillez reessayer.");
+      }
+      setLoading(false);
     }
   };
 
-  const principaux = comptes ? comptes.filter((u) => u.role !== "major") : [];
-  const majors = comptes ? comptes.filter((u) => u.role === "major") : [];
-
   return (
-    <div style={{
-      height: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "radial-gradient(1200px 600px at 70% -10%, rgba(45,212,191,.10), transparent), #0d1117", padding: 20,
-    }}>
-      <div className="fadeup" style={{ width: 440, maxWidth: "100%" }}>
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{
-            width: 60, height: 60, borderRadius: 16, margin: "0 auto 18px",
-            background: "linear-gradient(135deg, var(--teal), var(--tealdeep))",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 10px 30px rgba(45,212,191,.25)",
-          }}>
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#06231f" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M14 6l-3 3M8 8l-2 2 4 4M12 12l4 4 2-2" /><circle cx="6" cy="18" r="2" /><circle cx="18" cy="6" r="2" />
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-bg">
+      {/* Background gradient */}
+      <div 
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          background: theme === "dark" 
+            ? "radial-gradient(1200px 600px at 70% -10%, rgba(45,212,191,.08), transparent)"
+            : "radial-gradient(1200px 600px at 70% -10%, rgba(13,148,136,.06), transparent)"
+        }}
+      />
+
+      {/* Theme toggle - top right */}
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 p-3 rounded-xl bg-panel border border-line text-inksoft hover:text-ink hover:bg-panel2 transition-colors"
+        aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
+      >
+        {theme === "dark" ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+        )}
+      </button>
+
+      <div className="w-full max-w-md relative fadeup">
+        {/* Logo and title */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-5 bg-gradient-to-br from-teal to-tealdeep flex items-center justify-center shadow-lg" style={{ boxShadow: "0 10px 30px rgba(45,212,191,.25)" }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#06231f" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M14 6l-3 3M8 8l-2 2 4 4M12 12l4 4 2-2" />
+              <circle cx="6" cy="18" r="2" />
+              <circle cx="18" cy="6" r="2" />
             </svg>
           </div>
-          <h1 className="font-display" style={{ fontSize: 30, fontWeight: 600, letterSpacing: -0.5 }}>GMAO</h1>
-          <p style={{ color: "#9aa7b5", fontSize: 14.5, marginTop: 4 }}>Gestion de Maintenance — Clinique HUPSA</p>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-ink">GMAO</h1>
+          <p className="text-inksoft text-sm sm:text-base mt-2">Gestion de Maintenance - Clinique HUPSA</p>
         </div>
 
-        <Card style={{ padding: 22 }}>
-          {!comptes && !err && <p style={{ fontSize: 13, color: "#9aa7b5" }}>Chargement des comptes…</p>}
-          {err && <p style={{ color: "var(--red)", fontSize: 13, marginBottom: 12 }}>{err}</p>}
+        {/* Login form */}
+        <Card className="p-6 sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-semibold text-ink">Connexion</h2>
+              <p className="text-sm text-inksoft mt-1">Entrez vos identifiants pour acceder a votre compte</p>
+            </div>
 
-          {comptes && (
-            <>
-              <p style={{ fontSize: 12.5, color: "#5d6b7a", marginBottom: 10, fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.4 }}>Comptes principaux</p>
-              {principaux.map((u) => (
-                <button key={u.email} onClick={() => setSel(u)} style={{
-                  display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
-                  padding: "10px 12px", borderRadius: 10, marginBottom: 6, border: "none",
-                  background: sel?.email === u.email ? "color-mix(in srgb, var(--teal) 12%, transparent)" : "#1a2330",
-                  outline: sel?.email === u.email ? "1px solid var(--teal)" : "1px solid #27313f",
-                }}>
-                  <div style={{
-                    width: 34, height: 34, borderRadius: 99, flexShrink: 0, background: avatarColor(u.role),
-                    display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#06231f", fontSize: 13,
-                  }}>{u.prenom[0]}{u.nom[0]}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{u.prenom} {u.nom}</div>
-                    <div style={{ fontSize: 12, color: "#5d6b7a" }}>{ROLES[u.role]}</div>
-                  </div>
-                  {sel?.email === u.email && <span style={{ color: "var(--teal)" }}>✓</span>}
-                </button>
-              ))}
+            {/* Error message */}
+            {error && (
+              <div className="p-3 rounded-lg bg-red/10 border border-red/30 text-red text-sm">
+                {error}
+              </div>
+            )}
 
-              {majors.length > 0 && (
-                <>
-                  <button onClick={() => setMajorOpen((o) => !o)} style={{
-                    display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                    padding: "11px 13px", borderRadius: 10, marginTop: 10, border: "1px dashed #27313f",
-                    background: "transparent", color: "#9aa7b5", fontWeight: 600, fontSize: 13,
-                  }}>
-                    <span style={{ flex: 1 }}>👥 Majors de service ({majors.length})</span>
-                    <span style={{ transition: "transform .2s", transform: majorOpen ? "rotate(90deg)" : "none" }}>›</span>
-                  </button>
-                  {majorOpen && (
-                    <div style={{ marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
-                      {majors.map((u) => (
-                        <button key={u.email} onClick={() => setSel(u)} style={{
-                          display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                          padding: "8px 12px", borderRadius: 8, marginBottom: 3, border: "none",
-                          background: sel?.email === u.email ? "color-mix(in srgb, #06b6d4 14%, transparent)" : "transparent",
-                          outline: sel?.email === u.email ? "1px solid #06b6d4" : "none",
-                        }}>
-                          <div style={{
-                            width: 26, height: 26, borderRadius: 99, flexShrink: 0, background: "#06b6d4",
-                            display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#06231f", fontSize: 11,
-                          }}>{u.prenom[0]}M</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.service}</div>
-                          </div>
-                          {sel?.email === u.email && <span style={{ color: "#06b6d4", fontSize: 13 }}>✓</span>}
-                        </button>
-                      ))}
-                    </div>
+            {/* Email field */}
+            <Field label="Adresse email">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="votre.email@clinique-hupsa.fr"
+                autoComplete="email"
+                disabled={loading}
+                className="w-full"
+              />
+            </Field>
+
+            {/* Password field */}
+            <Field label="Mot de passe">
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Entrez votre mot de passe"
+                  autoComplete="current-password"
+                  disabled={loading}
+                  className="w-full pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-inkfaint hover:text-inksoft transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
                   )}
-                </>
-              )}
+                </button>
+              </div>
+            </Field>
 
-              <Btn onClick={connecter} disabled={!sel || busy} style={{ width: "100%", marginTop: 14 }}>
-                {busy ? "Connexion…" : sel ? `Se connecter — ${sel.prenom} ${sel.nom}` : "Sélectionnez un compte"}
-              </Btn>
-            </>
-          )}
+            {/* Remember me */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded border-line bg-panel2 text-teal focus:ring-teal focus:ring-offset-0"
+              />
+              <span className="text-sm text-inksoft">Se souvenir de mon email</span>
+            </label>
+
+            {/* Submit button */}
+            <Btn
+              type="submit"
+              disabled={loading}
+              style={{ width: "100%", marginTop: 8 }}
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Connexion en cours...
+                </span>
+              ) : (
+                "Se connecter"
+              )}
+            </Btn>
+          </form>
         </Card>
-        <p className="font-mono" style={{ textAlign: "center", marginTop: 16, fontSize: 11.5, color: "#5d6b7a" }}>
-          Mot de passe démo : hupsa2026
+
+        {/* Help text */}
+        <p className="text-center mt-6 text-xs sm:text-sm text-inkfaint">
+          {"Probleme de connexion ? Contactez l'administrateur systeme."}
         </p>
       </div>
     </div>
